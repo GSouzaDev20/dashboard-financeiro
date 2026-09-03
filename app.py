@@ -1,5 +1,6 @@
 
-from flask import Flask, render_template
+from flask import Flask, render_template, redirect, request
+from database import buscar_gastos, salvar_gasto
 
 app = Flask(__name__)
 
@@ -19,13 +20,8 @@ def Despesas(Gastos_Mensais):
 @app.route('/')
 def start():
     Salario = 5000
-    Gastos_Mensais = [
-        {"descricao": "Aluguel", "valor": 1500},
-        {"descricao": "Compras", "valor": 1000},
-        {"descricao": "Transporte", "valor": 500},
-        {"descricao": "Lazer", "valor": 300},
-        {"descricao": "Outros", "valor": 200}
-    ]
+    Gastos_Mensais = buscar_gastos()
+    gastos_detalhados = buscar_gastos()
     Valor_para_guardar = 500
 
     despesas = Despesas(Gastos_Mensais)
@@ -35,11 +31,19 @@ def start():
     limite_diario = Limite_diario(Valor_restante, DiaRestantes)
     return render_template('index.html', 
                            Salario=Salario, 
-                           Despesas=despesas, 
+                           Despesas=despesas,
+                           Despesas_Detalhadas=gastos_detalhados, 
                            Valor_para_guardar=Valor_para_guardar, 
                            Valor_restante=Valor_restante,
                            DiaRestantes=DiaRestantes,
                            Limite_diario=limite_diario)
+@app.route('/adicionar_gasto', methods=['POST'])
+def adicionar_gasto():
+    descricao = request.form['descricao']
+    valor = float(request.form['valor'])
+    # Aqui você pode adicionar a lógica para salvar o gasto no banco de dados
+    salvar_gasto(descricao, valor)
+    return redirect('/')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port = 5000, debug=True)

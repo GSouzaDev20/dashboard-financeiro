@@ -1,14 +1,29 @@
 <html lang="pt-br">
-    <head meta charset="UTF-8">
-        <title>Dashboard Financeiro</title>
-    </head>
-    <body>
-        <h1>Dashboard Financeiro</h1>
-        <p>Salário: R$ {{ Salario }}</p>
-        <p>Despesas: R$ {{ Despesas }}</p>
+
+<head meta charset="UTF-8">
+    <title>Dashboard Financeiro</title>
+</head>
+
+<body>
+    <h1>Dashboard Financeiro</h1>
+    <p>Salário: R$ {{ Salario }}</p>
+    <p>Despesas: R$ {{ Despesas }}</p>
+    {% for gasto in Despesas_Detalhadas %}
+    <p>Descrição: {{ gasto["descricao"] }} - Valor: R$ {{ gasto["valor"] }}</p>
+    {% endfor %}
+    <h2>Adicionar Gasto</h2>
+    <form method="POST" action="/adicionar_gasto">
+        <label for="descricao">Descrição:</label>
+        <input type="text" id="descricao" name="descricao">
+        <br></br>
+        <label for="valor">Valor:</label>
+        <input type="number" id="valor" name="valor">
+        <br></br>
+        <button type="submit">Adicionar Gasto</button>
         <p>Valor para guardar: R$ {{ Valor_para_guardar }}</p>
         <p>Saldo: R$ {{ Valor_restante }}</p>
         <p>Limite Diário: R$ {{ Limite_diario }}</p>
         <p>Dias Restantes: {{ DiaRestantes }}</p>
-    </body>
+</body>
+
 </html>
