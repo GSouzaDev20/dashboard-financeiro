@@ -40,7 +40,12 @@ def start():
 @app.route('/adicionar_gasto', methods=['POST'])
 def adicionar_gasto():
     descricao = request.form['descricao']
-    valor = float(request.form['valor'])
+    if not descricao:
+        return "Descrição do gasto não pode ser vazia.", 400
+    try:
+        valor = float(request.form['valor'])
+    except ValueError:
+        return "Valor do gasto deve ser um número válido.", 400
     # Aqui você pode adicionar a lógica para salvar o gasto no banco de dados
     salvar_gasto(descricao, valor)
     return redirect('/')

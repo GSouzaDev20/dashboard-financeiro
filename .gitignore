@@ -1,3 +1,6 @@
+# Banco de dados
+*.db
+
 # Ambiente virtual do Python
 .venv/
 venv/
