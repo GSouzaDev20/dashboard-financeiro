@@ -1,6 +1,6 @@
 
 from flask import Flask, render_template, redirect, request
-from database import buscar_gastos, salvar_gasto
+from database import buscar_gastos, salvar_gasto, deletar_gasto
 
 app = Flask(__name__)
 
@@ -51,6 +51,8 @@ def adicionar_gasto():
     descricao = request.form['descricao']
     if not descricao:
         return "Descrição do gasto não pode ser vazia.", 400
+    
+    categoria = request.form['categoria']
 
     try:
         valor = float(request.form['valor'])
@@ -60,9 +62,11 @@ def adicionar_gasto():
     if valor <= 0:
         return "Valor do gasto deve ser maior que zero.", 400
 
-    salvar_gasto(descricao, valor)
+    salvar_gasto(descricao, categoria, valor)
     return redirect('/')
-
-    
+@app.route('/deletar_gasto/<int:gasto_id>', methods=['POST'])
+def excluir_gasto(gasto_id):
+    deletar_gasto(gasto_id)
+    return redirect('/')
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
