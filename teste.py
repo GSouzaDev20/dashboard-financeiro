@@ -1,3 +1,3 @@
-from database import create_database, insert_initial_data, buscar_despesas_fixas
+from database import *
 
-buscar_despesas_fixas()
+pagar_despesa_fixa_ocorrencia(ocorrencia_id=7, data_pagamento='2024-06-15')

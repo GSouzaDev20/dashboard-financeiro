@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime
 
 def create_database():
     connect = sqlite3.connect('database.db')
@@ -13,16 +14,27 @@ def create_database():
     cursor.execute('''CREATE TABLE IF NOT EXISTS despesas_fixas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         descricao TEXT NOT NULL,
-        valor REAL NOT NULL,
+        valor REAL NOT NULL check (valor > 0),
         categoria_id INTEGER NOT NULL,
-        data_vencimento TEXT NOT NULL,
-        active TEXT NOT NULL DEFAULT 'yes',
+        dia_vencimento integer NOT NULL check (dia_vencimento BETWEEN 1 AND 31),
+        ativo INTEGER NOT NULL DEFAULT 1 check (ativo IN (0, 1)),
         FOREIGN KEY (categoria_id) REFERENCES categorias (id)
+    )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS despesas_fixas_ocorrencias (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        despesa_fixa_id INTEGER NOT NULL,
+        competencia TEXT NOT NULL,
+        valor REAL NOT NULL check (valor > 0),
+        data_pagamento TEXT,
+        status TEXT NOT NULL check (status IN ('pendente', 'pago')),
+        check ((data_pagamento IS NOT NULL AND status = 'pago') OR (data_pagamento IS NULL AND status = 'pendente')),
+        UNIQUE (despesa_fixa_id, competencia),
+        FOREIGN KEY (despesa_fixa_id) REFERENCES despesas_fixas (id)
     )''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS despesas_variaveis (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         descricao TEXT NOT NULL,
-        valor REAL NOT NULL,
+        valor REAL NOT NULL check (valor > 0),
         categoria_id INTEGER NOT NULL,
         data TEXT NOT NULL,
         FOREIGN KEY (categoria_id) REFERENCES categorias (id)
@@ -31,32 +43,31 @@ def create_database():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL,
         descricao TEXT NOT NULL,
-        valor REAL NOT NULL,
+        valor REAL NOT NULL check (valor > 0),
         data TEXT NOT NULL
     )''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS metas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL,
         descricao TEXT NOT NULL,
-        valor_objetivo REAL NOT NULL,
-        data_criacao TEXT,
+        valor_objetivo REAL NOT NULL check (valor_objetivo > 0),
+        data_criacao TEXT NOT NULL,
         data_conclusao TEXT
     )''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS aportes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         meta_id INTEGER NOT NULL,
-        valor REAL NOT NULL,
+        valor REAL NOT NULL check (valor > 0),
         data TEXT NOT NULL,
         FOREIGN KEY (meta_id) REFERENCES metas (id)
     )''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS resgates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         meta_id INTEGER NOT NULL,
-        valor REAL NOT NULL,
+        valor REAL NOT NULL check (valor > 0),
         data TEXT NOT NULL,
         FOREIGN KEY (meta_id) REFERENCES metas (id)
     )''')
-    cursor.execute('''DROP TABLE IF EXISTS gastos''')
 
     connect.commit()
     connect.close()
@@ -250,12 +261,12 @@ def salvar_despesa_variavel(descricao, valor, categoria_id, data):
     conexao.commit()
     conexao.close()
     
-def salvar_despesa_fixa(descricao, valor, categoria_id, data_vencimento):
+def salvar_despesa_fixa(descricao, valor, categoria_id, dia_vencimento, ativo=1):
     conexao = conectar()
     cursor = conexao.cursor()
 
-    cursor.execute("INSERT INTO despesas_fixas (descricao, valor, categoria_id, data_vencimento) VALUES (?, ?, ?, ?)",
-                   (descricao, valor, categoria_id, data_vencimento))
+    cursor.execute("INSERT INTO despesas_fixas (descricao, valor, categoria_id, dia_vencimento, ativo) VALUES (?, ?, ?, ?, ?)",
+                   (descricao, valor, categoria_id, dia_vencimento, ativo))
     conexao.commit()
     conexao.close()
     
@@ -294,3 +305,101 @@ def salvar_resgates(meta_id, valor, data):
                    (meta_id, valor, data))
     conexao.commit()
     conexao.close()
+   
+def salvar_despesa_fixa_ocorrencia(despesa_fixa_id, competencia, data_pagamento=None, status='pendente'):
+    conexao = conectar()
+    cursor = conexao.cursor()
+    
+    cursor.execute("INSERT INTO despesas_fixas_ocorrencias (despesa_fixa_id, competencia, valor, data_pagamento, status) VALUES (?, ?,(SELECT valor FROM despesas_fixas WHERE id = ?), ?, ?)",
+                   (despesa_fixa_id, competencia, despesa_fixa_id, data_pagamento, status))
+    conexao.commit()
+    
+    conexao.close()
+
+def buscar_despesas_fixas_ocorrencias():
+    conexao = conectar()
+    cursor = conexao.cursor()
+
+    cursor.execute("""SELECT despesas_fixas_ocorrencias.id,
+                          despesas_fixas_ocorrencias.despesa_fixa_id,
+                          categorias.nome AS categoria_nome,
+                          despesas_fixas_ocorrencias.competencia,
+                          despesas_fixas_ocorrencias.valor,
+                          despesas_fixas_ocorrencias.data_pagamento,
+                          despesas_fixas_ocorrencias.status,
+                          despesas_fixas.descricao AS despesa_fixa_descricao
+                   FROM despesas_fixas_ocorrencias
+                   INNER JOIN despesas_fixas ON despesas_fixas_ocorrencias.despesa_fixa_id = despesas_fixas.id
+                   INNER JOIN categorias ON despesas_fixas.categoria_id = categorias.id;""")
+    ocorrencias = cursor.fetchall()
+
+    conexao.close()
+
+    return ocorrencias
+
+def pagar_despesa_fixa_ocorrencia(ocorrencia_id, data_pagamento):
+    conexao = conectar()
+    cursor = conexao.cursor()
+    
+    cursor.execute("SELECT despesas_fixas_ocorrencias.status, despesas_fixas_ocorrencias.id, despesas_fixas_ocorrencias.despesa_fixa_id, despesas_fixas_ocorrencias.competencia FROM despesas_fixas_ocorrencias WHERE id = ?", (ocorrencia_id,))
+    ocorrencia = cursor.fetchone()  # Verifica se a ocorrência existe
+
+    try:
+        
+        if ocorrencia is None:
+            raise ValueError(f"Ocorrência com ID {ocorrencia_id} não encontrada.")
+    
+        if ocorrencia[0] == 'pago':
+            raise ValueError(f"Ocorrência com ID {ocorrencia_id} já está paga.")
+
+        cursor.execute("UPDATE despesas_fixas_ocorrencias SET data_pagamento = ?, status = 'pago' WHERE id = ?",
+                       (data_pagamento, ocorrencia_id))
+        criar_proxima_ocorrencia(conexao, ocorrencia[2], ocorrencia[3])  # Cria a próxima ocorrência depois de atualizar a atual
+        conexao.commit()
+    finally:
+        conexao.close()
+        
+def criar_proxima_ocorrencia(conexao,despesa_fixa_id, competencia):
+    cursor = conexao.cursor()
+    
+    cursor.execute("SELECT ativo FROM despesas_fixas WHERE id = ?", (despesa_fixa_id,))
+    despesa_ativa = cursor.fetchone()
+    
+    if despesa_ativa is None or despesa_ativa[0] == 0:
+        return 'Despesa Inativa' # Não cria a próxima ocorrência se a despesa fixa não estiver ativa
+    
+    ano, mes = competencia.split('-')
+    mes = int(mes)
+    ano = int(ano)
+    
+    mes += 1
+    if mes > 12:
+        mes = 1
+        ano += 1
+    nova_competencia = f"{ano}-{mes:02d}"
+    
+    # Insere a nova ocorrência
+    cursor.execute("INSERT INTO despesas_fixas_ocorrencias (despesa_fixa_id, competencia, valor, status) VALUES (?, ?, (SELECT valor FROM despesas_fixas WHERE id = ?), 'pendente')",
+                   (despesa_fixa_id, nova_competencia, despesa_fixa_id))
+    
+def buscar_despesas_fixas_ocorrencias_por_competencia(competencia):
+    conexao = conectar()
+    cursor = conexao.cursor()
+
+    cursor.execute("""SELECT despesas_fixas_ocorrencias.id,
+                          despesas_fixas_ocorrencias.despesa_fixa_id,
+                          categorias.nome AS categoria_nome,
+                          despesas_fixas_ocorrencias.competencia,
+                          despesas_fixas_ocorrencias.valor,
+                          despesas_fixas_ocorrencias.data_pagamento,
+                          despesas_fixas_ocorrencias.status,
+                          despesas_fixas.descricao AS despesa_fixa_descricao
+                   FROM despesas_fixas_ocorrencias
+                   INNER JOIN despesas_fixas ON despesas_fixas_ocorrencias.despesa_fixa_id = despesas_fixas.id
+                   INNER JOIN categorias ON despesas_fixas.categoria_id = categorias.id
+                   WHERE despesas_fixas_ocorrencias.competencia = ?;""", (competencia,))
+    ocorrencias = cursor.fetchall()
+
+    conexao.close()
+
+    return ocorrencias
